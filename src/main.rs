@@ -1,5 +1,3 @@
-extern crate walkdir;
-
 use walkdir::WalkDir;
 use std::path::{Path, PathBuf};
 use std::fs::File;
@@ -8,6 +6,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::process::exit;
 use clap::{App, Arg};
+use id3::Tag;
 
 
 const MUSIC_FILE_EXTENSIONS: [&str; 3] = ["m4a", "mp3", "aac"];
@@ -75,11 +74,19 @@ impl Playlist {
         let mut content = String::from("[");
 
         for i in 0..self.songs.len() {
+            let tag = match Tag::read_from_path(&self.songs[i]) {
+                Ok(t) => t,
+                Err(_e) => {
+                    println!("couldn't read tag: {}", _e);
+                    Tag::new()
+                }
+            };
+
             let song = VOLUMIO_SONG_PATTERN
                 .replace("<path>", &self.songs[i].to_str().unwrap_or(""))
-                .replace("<title>", "")
-                .replace("<artist>", "")
-                .replace("<album>", "")
+                .replace("<title>", tag.title().unwrap_or(""))
+                .replace("<artist>", tag.artist().unwrap_or(""))
+                .replace("<album>", tag.album().unwrap_or(""))
                 .replace("<albumart>", "");
 
             if i != 0 {
@@ -137,16 +144,22 @@ fn main() {
     println!("searching playlists...");
     let m3u_playlist_paths = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
 
-    println!("localizing playlists...");
+    println!("localizing songs...");
+    let mut playlists: Vec<Playlist> = Vec::new();
+
     for p in m3u_playlist_paths {
         let file_names = m3u_playlist_file_names(p);
         let playlist_name = String::from(p.file_stem().unwrap().to_str().unwrap());
-        let mut playlist = m3u_playlist(&music_index, &file_names, playlist_name);
 
-        playlist.write_to(output_dir, format);
+        playlists.push(m3u_playlist(&music_index, &file_names, playlist_name));
     }
 
-    println!("finished")
+    println!("writing playlists...");
+    for mut p in playlists {
+        p.write_to(output_dir, format);
+    }
+
+    println!("done")
 }
 
 fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
