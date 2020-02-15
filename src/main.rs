@@ -9,6 +9,20 @@ use std::ffi::OsStr;
 use std::process::exit;
 use clap::{App, Arg};
 
+
+const MUSIC_FILE_EXTENSIONS: [&str; 3] = ["m4a", "mp3", "aac"];
+const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
+const VOLUMIO_SONG_PATTERN: &str = "
+    {
+        \"service\":\"mpd\",
+        \"uri\":\"<path>\",
+        \"title\":\"<title>\",
+        \"artist\":\"<artist>\",
+        \"album\":\"<album>\",
+        \"albumart\":\"<albumart>\"
+    }";
+
+
 struct Playlist {
     name: String,
     songs: Vec<PathBuf>,
@@ -23,7 +37,7 @@ impl Playlist {
         self.songs.push(song);
     }
 
-    fn write_to(&mut self, path: &Path) {
+    fn write_to(&mut self, path: &Path, format: &str) {
         let file_path = path.join(&self.name);
         let mut file = match File::create(file_path) {
             Ok(f) => f,
@@ -33,7 +47,12 @@ impl Playlist {
             }
         };
 
-        let r = file.write(self.contents().as_bytes());
+        let r = file.write(
+            match format {
+                "volumio" => self.to_volumio(),
+                _ => self.to_m3u(),
+            }.as_bytes()
+        );
 
         match r {
             Ok(_t) => (),
@@ -41,8 +60,8 @@ impl Playlist {
         }
     }
 
-    fn contents(&mut self) -> String {
-        let mut content = String::new(); // TODO replace with some sort of buffer
+    fn to_m3u(&self) -> String {
+        let mut content = String::new();
 
         for s in &self.songs {
             content.push_str(&String::from(s.to_str().unwrap()));
@@ -51,10 +70,31 @@ impl Playlist {
 
         content
     }
+
+    fn to_volumio(&self) -> String {
+        let mut content = String::from("[");
+
+        for i in 0..self.songs.len() {
+            let song = VOLUMIO_SONG_PATTERN
+                .replace("<path>", &self.songs[i].to_str().unwrap_or(""))
+                .replace("<title>", "")
+                .replace("<artist>", "")
+                .replace("<album>", "")
+                .replace("<albumart>", "");
+
+            if i != 0 {
+                content.push(',');
+            }
+
+            content.push_str(&song);
+        }
+
+        content.push(']');
+
+        content
+    }
 }
 
-const MUSIC_FILE_EXTENSIONS: [&str; 6] = ["m4a", "mp3", "aac", "flac", "opus", "wav"];
-const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
 
 fn main() {
     let matches = App::new("playlist localizer")
@@ -73,10 +113,18 @@ fn main() {
             .help("The directory which the playlists will be written to")
             .takes_value(true)
             .required(true))
+        .arg(Arg::with_name("format")
+            .short("f")
+            .long("format")
+            .help("The wanted output format")
+            .takes_value(true)
+            .possible_value("m3u")
+            .possible_value("volumio"))
         .get_matches();
 
     let root = matches.value_of("root-dir").unwrap();
     let output = matches.value_of("output-dir").unwrap();
+    let format = matches.value_of("format").unwrap_or("m3u");
 
     let root_dir = Path::new(root);
     let output_dir = Path::new(output);
@@ -95,7 +143,7 @@ fn main() {
         let playlist_name = String::from(p.file_stem().unwrap().to_str().unwrap());
         let mut playlist = m3u_playlist(&music_index, &file_names, playlist_name);
 
-        playlist.write_to(output_dir);
+        playlist.write_to(output_dir, format);
     }
 
     println!("finished")
