@@ -1,12 +1,13 @@
-use walkdir::WalkDir;
-use std::path::{Path, PathBuf};
-use std::fs::File;
-use std::io::{Read, Write};
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::exit;
+
 use clap::{App, Arg};
 use id3::Tag;
+use walkdir::WalkDir;
 
 
 const MUSIC_FILE_EXTENSIONS: [&str; 3] = ["m4a", "mp3", "aac"];
@@ -63,7 +64,7 @@ impl Playlist {
         let mut content = String::new();
 
         for s in &self.songs {
-            content.push_str(&String::from(s.to_str().unwrap()));
+            content.push_str(s.to_str().unwrap_or(""));
             content.push('\n');
         }
 
@@ -71,7 +72,7 @@ impl Playlist {
     }
 
     fn to_volumio(&self) -> String {
-        let mut content = String::from("[");
+        let mut content = "[".to_string();
 
         for i in 0..self.songs.len() {
             let tag = match Tag::read_from_path(&self.songs[i]) {
@@ -148,10 +149,10 @@ fn main() {
     let mut playlists: Vec<Playlist> = Vec::new();
 
     for p in m3u_playlist_paths {
-        let file_names = m3u_playlist_file_names(p);
-        let playlist_name = String::from(p.file_stem().unwrap().to_str().unwrap());
+        let file_paths = m3u_playlist_path(p);
+        let playlist_name: &str = p.file_stem().unwrap_or(OsStr::new("")).to_str().unwrap_or("");
 
-        playlists.push(m3u_playlist(&music_index, &file_names, playlist_name));
+        playlists.push(m3u_playlist(&music_index, &file_paths, playlist_name.to_string()));
     }
 
     println!("writing playlists...");
@@ -195,8 +196,8 @@ fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     (music_index, playlist_index)
 }
 
-fn m3u_playlist_file_names(playlist_path: &Path) -> Vec<String> {
-    let mut results: Vec<String> = Vec::new();
+fn m3u_playlist_path(playlist_path: &Path) -> Vec<PathBuf> {
+    let mut results: Vec<PathBuf> = Vec::new();
     let mut file = File::open(playlist_path).unwrap();
     let mut contents = String::new();
 
@@ -208,22 +209,20 @@ fn m3u_playlist_file_names(playlist_path: &Path) -> Vec<String> {
 
     for l in contents.lines() {
         if !l.starts_with("#EXT") {
-            let path = Path::new(l);
-            let name = path.file_name().unwrap().to_str().unwrap();
-            results.push(String::from(name))
+            results.push(PathBuf::from(l))
         }
     }
 
     results
 }
 
-fn m3u_playlist(index: &Vec<PathBuf>, file_names: &Vec<String>, name: String) -> Playlist {
+fn m3u_playlist(index: &Vec<PathBuf>, file_paths: &Vec<PathBuf>, name: String) -> Playlist {
     let mut playlist = Playlist::new(name);
 
-    for f in file_names {
-        let file_path = match_file(&index, f);
+    for f in file_paths {
+        let local_file_path = match_file(&index, f);
 
-        match file_path {
+        match local_file_path {
             Some(s) => playlist.add(PathBuf::from(s)),
             None => (),
         }
@@ -250,14 +249,29 @@ fn matches_extension(s: &OsStr) -> i8 {
 }
 
 #[inline]
-fn match_file<'index>(index: &'index Vec<PathBuf>, file_name: &str) -> Option<&'index PathBuf> {
+fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Option<&'index PathBuf> {
+    let mut best_result: (u8, Option<&PathBuf>) = (0u8, None);
+
+
     for p in index {
-        if p.ends_with(file_name) {
-            return Some(p);
+        let mut local_components = p.components().rev();
+        let mut components = file_path.components().rev();
+
+        let mut pos = 0_u8;
+        while let Some(lc) = local_components.next() {
+            if let Some(c) = components.next() {
+                if lc != c {
+                    if pos != 0 && pos > best_result.0 {
+                        best_result = (pos, Some(p));
+                    }
+                    break;
+                }
+            }
+            pos += 1;
         }
     }
 
-    return None;
+    best_result.1
 }
 
 fn match_file_extension<'index>(index: &'index Vec<PathBuf>, extension: &str) -> Vec<&'index PathBuf> {
