@@ -20,7 +20,9 @@ const VOLUMIO_SONG_PATTERN: &str = "
         \"album\":\"<album>\",
         \"albumart\":\"<albumart>\"
     }";
-
+const EXTM3U_SONG_PATTERN: &str = "
+#EXTINF:<duration>,<artist> - <title>
+<path>";
 
 struct Playlist {
     name: String,
@@ -49,6 +51,7 @@ impl Playlist {
         let r = file.write(
             match format {
                 "volumio" => self.to_volumio(),
+                "extm3u" => self.to_extm3u(),
                 _ => self.to_m3u(),
             }.as_bytes()
         );
@@ -68,6 +71,36 @@ impl Playlist {
                 content.push('\n');
             }
         }
+
+        content
+    }
+
+    fn to_extm3u(&self) -> String {
+        let mut content = "[".to_string();
+
+        for i in 0..self.songs.len() {
+            let tag = match Tag::read_from_path(&self.songs[i]) {
+                Ok(t) => t,
+                Err(_e) => {
+                    println!("couldn't read tag: {}", _e);
+                    Tag::new()
+                }
+            };
+
+            let song = EXTM3U_SONG_PATTERN
+                .replace("<duration>", &tag.duration().unwrap_or(0_u32).to_string())
+                .replace("<artist>", tag.artist().unwrap_or(""))
+                .replace("<title>", tag.title().unwrap_or(""))
+                .replace("<path>", &self.songs[i].to_str().unwrap_or(""));
+
+            if i != 0 {
+                content.push(',');
+            }
+
+            content.push_str(&song);
+        }
+
+        content.push(']');
 
         content
     }
@@ -104,7 +137,53 @@ impl Playlist {
     }
 }
 
+#[test]
+fn bench() {
+    let t1 = std::time::SystemTime::now();
+    main();
+    let t2 = std::time::SystemTime::now();
+
+    println!("{:?}", t2.duration_since(t1).unwrap().as_millis());
+}
+
 fn main() {
+    let params = params();
+
+    let root_dir = Path::new(&params.0);
+    let output_dir = Path::new(&params.1);
+    let format = &params.2;
+    let extension = &params.3;
+
+    println!("indexing...");
+    let indexes = index(root_dir);
+    let music_index = indexes.0;
+    let playlist_index = indexes.1;
+
+    println!("searching playlists...");
+    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
+
+    println!("localizing songs...");
+    let mut playlists: Vec<Playlist> = Vec::new();
+
+    for p in m3u_playlists {
+        let file_paths = m3u_playlist_paths(p);
+
+        if let Some(stem) = p.file_stem() {
+            if let Some(name) = stem.to_str() {
+                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
+            }
+        }
+    }
+
+    println!("writing playlists...");
+    for mut p in playlists {
+        p.write_to(output_dir, format, extension);
+    }
+
+    println!("done")
+}
+
+fn params() -> (String, String, String, String) {
     let matches = App::new("playlist localizer")
         .version("1.0-beta")
         .author("Tobias Schmitz")
@@ -127,6 +206,7 @@ fn main() {
             .help("The wanted output format")
             .takes_value(true)
             .possible_value("m3u")
+            .possible_value("extm3u")
             .possible_value("volumio"))
         .arg(Arg::with_name("output-file-extension")
             .short("e")
@@ -135,41 +215,15 @@ fn main() {
             .takes_value(true))
         .get_matches();
 
-    let root = matches.value_of("root-dir").unwrap();
-    let output = matches.value_of("output-dir").unwrap();
+    let root_dir = matches.value_of("root-dir").unwrap();
+    let output_dir = matches.value_of("output-dir").unwrap();
     let format = matches.value_of("format").unwrap_or("m3u");
     let extension = matches.value_of("output-file-extension").unwrap_or("");
 
-    let root_dir = Path::new(root);
-    let output_dir = Path::new(output);
-
-    println!("indexing...");
-    let indexes = index(root_dir);
-    let music_index = indexes.0;
-    let playlist_index = indexes.1;
-
-    println!("searching playlists...");
-    let m3u_playlist_paths = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
-
-    println!("localizing songs...");
-    let mut playlists: Vec<Playlist> = Vec::new();
-
-    for p in m3u_playlist_paths {
-        let file_paths = m3u_playlist_path(p);
-
-        if let Some(stem) = p.file_stem() {
-            if let Some(name) = stem.to_str() {
-                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
-            }
-        }
-    }
-
-    println!("writing playlists...");
-    for mut p in playlists {
-        p.write_to(output_dir, format, extension);
-    }
-
-    println!("done")
+    (root_dir.to_string(),
+     output_dir.to_string(),
+     format.to_string(),
+     extension.to_string())
 }
 
 fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
@@ -202,7 +256,7 @@ fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     (music_index, playlist_index)
 }
 
-fn m3u_playlist_path(playlist_path: &Path) -> Vec<PathBuf> {
+fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
     let mut results: Vec<PathBuf> = Vec::new();
     if let Ok(mut file) = File::open(playlist_path) {
         let mut contents = String::new();
