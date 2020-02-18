@@ -29,6 +29,13 @@ struct Playlist {
     songs: Vec<PathBuf>,
 }
 
+struct SongMetadata {
+    title: String,
+    artist: String,
+    album: String,
+    duration: u32,
+}
+
 impl Playlist {
     fn new(name: String) -> Playlist {
         Playlist { name, songs: Vec::new() }
@@ -79,18 +86,11 @@ impl Playlist {
         let mut content = "[".to_string();
 
         for i in 0..self.songs.len() {
-            let tag = match Tag::read_from_path(&self.songs[i]) {
-                Ok(t) => t,
-                Err(_e) => {
-                    println!("couldn't read tag: {}", _e);
-                    Tag::new()
-                }
-            };
-
+            let song_metadata = SongMetadata::from(&self.songs[i]);
             let song = EXTM3U_SONG_PATTERN
-                .replace("<duration>", &tag.duration().unwrap_or(0_u32).to_string())
-                .replace("<artist>", tag.artist().unwrap_or(""))
-                .replace("<title>", tag.title().unwrap_or(""))
+                .replace("<duration>", &song_metadata.duration.to_string())
+                .replace("<artist>", &song_metadata.artist)
+                .replace("<title>", &song_metadata.title)
                 .replace("<path>", &self.songs[i].to_str().unwrap_or(""));
 
             if i != 0 {
@@ -109,19 +109,12 @@ impl Playlist {
         let mut content = "[".to_string();
 
         for i in 0..self.songs.len() {
-            let tag = match Tag::read_from_path(&self.songs[i]) {
-                Ok(t) => t,
-                Err(_e) => {
-                    println!("couldn't read tag: {}", _e);
-                    Tag::new()
-                }
-            };
-
+            let song_metadata = SongMetadata::from(&self.songs[i]);
             let song = VOLUMIO_SONG_PATTERN
                 .replace("<path>", &self.songs[i].to_str().unwrap_or(""))
-                .replace("<title>", tag.title().unwrap_or(""))
-                .replace("<artist>", tag.artist().unwrap_or(""))
-                .replace("<album>", tag.album().unwrap_or(""))
+                .replace("<title>", &song_metadata.title)
+                .replace("<artist>", &song_metadata.artist)
+                .replace("<album>", &song_metadata.album)
                 .replace("<albumart>", "");
 
             if i != 0 {
@@ -137,13 +130,23 @@ impl Playlist {
     }
 }
 
-#[test]
-fn bench() {
-    let t1 = std::time::SystemTime::now();
-    main();
-    let t2 = std::time::SystemTime::now();
+impl SongMetadata {
+    fn new() -> SongMetadata {
+        SongMetadata { title: String::new(), artist: String::new(), album: String::new(), duration: 0_u32 }
+    }
 
-    println!("{:?}", t2.duration_since(t1).unwrap().as_millis());
+    fn from(path: &Path) -> SongMetadata {
+        return if let Ok(tag) = Tag::read_from_path(path) {
+            SongMetadata {
+                title: tag.title().unwrap_or("").to_string(),
+                artist: tag.artist().unwrap_or("").to_string(),
+                album: tag.album().unwrap_or("").to_string(),
+                duration: tag.duration().unwrap_or(0),
+            }
+        } else {
+            SongMetadata::new()
+        };
+    }
 }
 
 fn main() {
