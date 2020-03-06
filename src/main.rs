@@ -271,7 +271,8 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
 
         for l in contents.lines() {
             if !l.starts_with("#EXT") {
-                results.push(PathBuf::from(l))
+                let path = l.replace("\\", "//");
+                results.push(PathBuf::from(path));
             }
         }
     }
