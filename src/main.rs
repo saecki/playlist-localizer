@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -6,20 +5,19 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use clap::{App, Arg};
-use id3::Tag;
+use id3;
 use walkdir::WalkDir;
 
-const MUSIC_FILE_EXTENSIONS: [&str; 3] = ["m4a", "mp3", "aac"];
+const MUSIC_FILE_EXTENSIONS: [&str; 7] = [
+    "aac",
+    "flac",
+    "m4a",
+    "m4b",
+    "mp3",
+    "ogg",
+    "opus",
+];
 const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
-const VOLUMIO_SONG_PATTERN: &str = "
-    {
-        \"service\":\"mpd\",
-        \"uri\":\"<path>\",
-        \"title\":\"<title>\",
-        \"artist\":\"<artist>\",
-        \"album\":\"<album>\",
-        \"albumart\":\"<albumart>\"
-    }";
 const EXTM3U_SONG_PATTERN: &str = "
 #EXTINF:<duration>,<artist> - <title>
 <path>";
@@ -27,13 +25,6 @@ const EXTM3U_SONG_PATTERN: &str = "
 struct Playlist {
     name: String,
     songs: Vec<PathBuf>,
-}
-
-struct SongMetadata {
-    title: String,
-    artist: String,
-    album: String,
-    duration: u32,
 }
 
 impl Playlist {
@@ -50,14 +41,13 @@ impl Playlist {
         let mut file = match File::create(file_path) {
             Ok(f) => f,
             Err(e) => {
-                println!("couldn't write playlist: {}\n{}", &self.name, e.to_string());
+                println!("couldn't write playlist: {}\n{:?}", &self.name, e);
                 return;
             }
         };
 
         let r = file.write(
             match format {
-                "volumio" => self.to_volumio(),
                 "extm3u" => self.to_extm3u(),
                 _ => self.to_m3u(),
             }.as_bytes()
@@ -65,7 +55,7 @@ impl Playlist {
 
         match r {
             Ok(_t) => (),
-            Err(e) => println!("Couldn't write playlist because:\n{}", e.description())
+            Err(e) => println!("Couldn't write playlist because:\n{:?}", e)
         }
     }
 
@@ -104,30 +94,13 @@ impl Playlist {
 
         content
     }
+}
 
-    fn to_volumio(&self) -> String {
-        let mut content = "[".to_string();
-
-        for i in 0..self.songs.len() {
-            let song_metadata = SongMetadata::from(&self.songs[i]);
-            let song = VOLUMIO_SONG_PATTERN
-                .replace("<path>", &self.songs[i].to_str().unwrap_or(""))
-                .replace("<title>", &song_metadata.title)
-                .replace("<artist>", &song_metadata.artist)
-                .replace("<album>", &song_metadata.album)
-                .replace("<albumart>", "");
-
-            if i != 0 {
-                content.push(',');
-            }
-
-            content.push_str(&song);
-        }
-
-        content.push(']');
-
-        content
-    }
+struct SongMetadata {
+    title: String,
+    artist: String,
+    album: String,
+    duration: u32,
 }
 
 impl SongMetadata {
@@ -136,12 +109,19 @@ impl SongMetadata {
     }
 
     fn from(path: &Path) -> SongMetadata {
-        return if let Ok(tag) = Tag::read_from_path(path) {
+        return if let Ok(tag) = id3::Tag::read_from_path(path) {
             SongMetadata {
                 title: tag.title().unwrap_or("").to_string(),
                 artist: tag.artist().unwrap_or("").to_string(),
                 album: tag.album().unwrap_or("").to_string(),
                 duration: tag.duration().unwrap_or(0),
+            }
+        } else if let Ok(tag) = mp4ameta::Tag::read_from_path(path) {
+            SongMetadata {
+                title: tag.title().unwrap_or("").to_string(),
+                artist: tag.artist().unwrap_or("").to_string(),
+                album: tag.album().unwrap_or("").to_string(),
+                duration: 0,
             }
         } else {
             SongMetadata::new()
@@ -209,8 +189,7 @@ fn params() -> (String, String, String, String) {
             .help("The wanted output format")
             .takes_value(true)
             .possible_value("m3u")
-            .possible_value("extm3u")
-            .possible_value("volumio"))
+            .possible_value("extm3u"))
         .arg(Arg::with_name("output-file-extension")
             .short("e")
             .long("output-file-extension")
@@ -233,7 +212,7 @@ fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let abs_root_path = match root_dir.canonicalize() {
         Ok(t) => t,
         Err(e) => {
-            println!("Not a valid root path: {}\n{}", root_dir.display(), e.to_string());
+            println!("Not a valid root path: {}\n{:?}", root_dir.display(), e);
             exit(1)
         }
     };
@@ -271,7 +250,7 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
 
         for l in contents.lines() {
             if !l.starts_with("#EXT") {
-                let path = l.replace("\\", "//");
+                let path = l.replace("\\", "/");
                 results.push(PathBuf::from(path));
             }
         }
@@ -333,6 +312,7 @@ fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Optio
 
     best_result.1
 }
+
 
 fn match_file_extension<'index>(index: &'index Vec<PathBuf>, extension: &str) -> Vec<&'index PathBuf> {
     let mut results: Vec<&PathBuf> = Vec::new();
