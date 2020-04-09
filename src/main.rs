@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
+use std::fs;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -38,23 +39,17 @@ impl Playlist {
 
     fn write_to(&mut self, path: &Path, format: &str, extension: &str) {
         let file_path = path.join(&self.name).with_extension(extension);
-        let mut file = match File::create(file_path) {
-            Ok(f) => f,
-            Err(e) => {
-                println!("couldn't write playlist: {}\n{:?}", &self.name, e);
-                return;
-            }
-        };
 
-        let r = file.write(
+        let r = fs::write(
+            file_path,
             match format {
                 "extm3u" => self.to_extm3u(),
                 _ => self.to_m3u(),
-            }.as_bytes()
+            },
         );
 
         match r {
-            Ok(_t) => (),
+            Ok(_) => (),
             Err(e) => println!("Couldn't write playlist because:\n{:?}", e)
         }
     }
@@ -99,13 +94,12 @@ impl Playlist {
 struct SongMetadata {
     title: String,
     artist: String,
-    album: String,
     duration: u32,
 }
 
 impl SongMetadata {
     fn new() -> SongMetadata {
-        SongMetadata { title: String::new(), artist: String::new(), album: String::new(), duration: 0_u32 }
+        SongMetadata { title: String::new(), artist: String::new(), duration: 0_u32 }
     }
 
     fn from(path: &Path) -> SongMetadata {
@@ -113,14 +107,12 @@ impl SongMetadata {
             SongMetadata {
                 title: tag.title().unwrap_or("").to_string(),
                 artist: tag.artist().unwrap_or("").to_string(),
-                album: tag.album().unwrap_or("").to_string(),
                 duration: tag.duration().unwrap_or(0),
             }
         } else if let Ok(tag) = mp4ameta::Tag::read_from_path(path) {
             SongMetadata {
                 title: tag.title().unwrap_or("").to_string(),
                 artist: tag.artist().unwrap_or("").to_string(),
-                album: tag.album().unwrap_or("").to_string(),
                 duration: 0,
             }
         } else {
@@ -250,8 +242,7 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
 
         for l in contents.lines() {
             if !l.starts_with("#EXT") {
-                let path = l.replace("\\", "/");
-                results.push(PathBuf::from(path));
+                results.push(PathBuf::from(l));
             }
         }
     }
@@ -312,7 +303,6 @@ fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Optio
 
     best_result.1
 }
-
 
 fn match_file_extension<'index>(index: &'index Vec<PathBuf>, extension: &str) -> Vec<&'index PathBuf> {
     let mut results: Vec<&PathBuf> = Vec::new();
