@@ -189,9 +189,9 @@ dependencies = [
 
 [[package]]
 name = "mp4ameta"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b42182775dd951e2179e55f331e499526b4fc8ce405095c836f9acedf62afa"
+checksum = "8781ca4b10a7960a840ec0e537f66c09c527c4f7dc9a2c7ec1e34eb9cfc022ee"
 dependencies = [
  "byteorder",
 ]

@@ -1,13 +1,16 @@
 use std::ffi::OsStr;
-use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use clap::{App, Arg};
-use id3;
 use walkdir::WalkDir;
+
+use crate::playlist::Playlist;
+
+mod playlist;
+mod metadata;
 
 const MUSIC_FILE_EXTENSIONS: [&str; 7] = [
     "aac",
@@ -19,107 +22,6 @@ const MUSIC_FILE_EXTENSIONS: [&str; 7] = [
     "opus",
 ];
 const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
-const EXTM3U_SONG_PATTERN: &str = "
-#EXTINF:<duration>,<artist> - <title>
-<path>";
-
-struct Playlist {
-    name: String,
-    songs: Vec<PathBuf>,
-}
-
-impl Playlist {
-    fn new(name: String) -> Playlist {
-        Playlist { name, songs: Vec::new() }
-    }
-
-    fn add(&mut self, song: PathBuf) {
-        self.songs.push(song);
-    }
-
-    fn write_to(&mut self, path: &Path, format: &str, extension: &str) {
-        let file_path = path.join(&self.name).with_extension(extension);
-
-        let r = fs::write(
-            file_path,
-            match format {
-                "extm3u" => self.to_extm3u(),
-                _ => self.to_m3u(),
-            },
-        );
-
-        match r {
-            Ok(_) => (),
-            Err(e) => println!("Couldn't write playlist because:\n{:?}", e)
-        }
-    }
-
-    fn to_m3u(&self) -> String {
-        let mut content = String::new();
-
-        for p in &self.songs {
-            if let Some(s) = p.to_str() {
-                content.push_str(s);
-                content.push('\n');
-            }
-        }
-
-        content
-    }
-
-    fn to_extm3u(&self) -> String {
-        let mut content = "[".to_string();
-
-        for i in 0..self.songs.len() {
-            let song_metadata = SongMetadata::from(&self.songs[i]);
-            let song = EXTM3U_SONG_PATTERN
-                .replace("<duration>", &song_metadata.duration.to_string())
-                .replace("<artist>", &song_metadata.artist)
-                .replace("<title>", &song_metadata.title)
-                .replace("<path>", &self.songs[i].to_str().unwrap_or(""));
-
-            if i != 0 {
-                content.push(',');
-            }
-
-            content.push_str(&song);
-        }
-
-        content.push(']');
-
-        content
-    }
-}
-
-struct SongMetadata {
-    title: String,
-    artist: String,
-    duration: u32,
-}
-
-impl SongMetadata {
-    fn new() -> SongMetadata {
-        SongMetadata { title: String::new(), artist: String::new(), duration: 0_u32 }
-    }
-
-    fn from(path: &Path) -> SongMetadata {
-        return if let Ok(tag) = id3::Tag::read_from_path(path) {
-            SongMetadata {
-                title: tag.title().unwrap_or("").to_string(),
-                artist: tag.artist().unwrap_or("").to_string(),
-                duration: tag.duration().unwrap_or(0),
-            }
-        } else if let Ok(tag) = mp4ameta::Tag::read_from_path(path) {
-            SongMetadata {
-                title: tag.title().unwrap_or("").to_string(),
-                artist: tag.artist().unwrap_or("").to_string(),
-                duration: 0,
-            }
-        } else {
-            SongMetadata::new()
-        };
-    }
-}
 
 fn main() {
     let params = params();
