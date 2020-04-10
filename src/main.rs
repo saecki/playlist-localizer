@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -8,6 +7,7 @@ use clap::{App, Arg};
 use walkdir::WalkDir;
 
 use crate::playlist::Playlist;
+use std::ffi::OsStr;
 
 mod playlist;
 mod metadata;
@@ -24,44 +24,7 @@ const MUSIC_FILE_EXTENSIONS: [&str; 7] = [
 const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
 
 fn main() {
-    let params = params();
-
-    let root_dir = Path::new(&params.0);
-    let output_dir = Path::new(&params.1);
-    let format = &params.2;
-    let extension = &params.3;
-
-    println!("indexing...");
-    let indexes = index(root_dir);
-    let music_index = indexes.0;
-    let playlist_index = indexes.1;
-
-    println!("searching playlists...");
-    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
-
-    println!("localizing songs...");
-    let mut playlists: Vec<Playlist> = Vec::new();
-
-    for p in m3u_playlists {
-        let file_paths = m3u_playlist_paths(p);
-
-        if let Some(stem) = p.file_stem() {
-            if let Some(name) = stem.to_str() {
-                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
-            }
-        }
-    }
-
-    println!("writing playlists...");
-    for mut p in playlists {
-        p.write_to(output_dir, format, extension);
-    }
-
-    println!("done")
-}
-
-fn params() -> (String, String, String, String) {
-    let matches = App::new("playlist localizer")
+    let app = App::new("playlist localizer")
         .version("1.0-beta")
         .author("Tobias Schmitz")
         .about("Finds the local paths to your playlists' songs.")
@@ -89,17 +52,55 @@ fn params() -> (String, String, String, String) {
             .long("output-file-extension")
             .help("The file extension of the output playlist files")
             .takes_value(true))
-        .get_matches();
+        .arg(Arg::with_name("generate-completion")
+            .short("g")
+            .long("generate-completion")
+            .help("Generate a completion script for your shell")
+            .possible_value("bash")
+            .possible_value("elvish")
+            .possible_value("fish")
+            .possible_value("powershell")
+            .possible_value("zsh")
+        );
 
-    let root_dir = matches.value_of("root-dir").unwrap();
-    let output_dir = matches.value_of("output-dir").unwrap();
+    let matches = app.get_matches();
+
+    let root_dir = PathBuf::from(matches.value_of("root-dir").unwrap());
+    let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
     let format = matches.value_of("format").unwrap_or("m3u");
     let extension = matches.value_of("output-file-extension").unwrap_or("");
+    let generate_completion = matches.value_of("generate-completion").unwrap_or("");
 
-    (root_dir.to_string(),
-     output_dir.to_string(),
-     format.to_string(),
-     extension.to_string())
+    if generate_completion != "" {
+    }
+
+    println!("indexing...");
+    let indexes = index(&root_dir);
+    let music_index = indexes.0;
+    let playlist_index = indexes.1;
+
+    println!("searching playlists...");
+    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
+
+    println!("localizing songs...");
+    let mut playlists: Vec<Playlist> = Vec::new();
+
+    for p in m3u_playlists {
+        let file_paths = m3u_playlist_paths(p);
+
+        if let Some(stem) = p.file_stem() {
+            if let Some(name) = stem.to_str() {
+                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
+            }
+        }
+    }
+
+    println!("writing playlists...");
+    for mut p in playlists {
+        p.write_to(&output_dir, format, extension);
+    }
+
+    println!("done")
 }
 
 fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
