@@ -26,8 +26,8 @@ const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
 
 fn main() {
     let app = App::new("playlist localizer")
-        .version("1.0-beta")
-        .author("Tobias Schmitz")
+        .version("0.2.0")
+        .author("Saecki")
         .about("Finds the local paths to your playlists' songs.")
         .arg(Arg::with_name("music-dir")
             .short("m")
@@ -52,15 +52,16 @@ fn main() {
         .arg(Arg::with_name("output-file-extension")
             .short("e")
             .long("output-file-extension")
+            .value_name("extension")
             .help("The file extension of the output playlist files")
             .takes_value(true))
         .arg(Arg::with_name("generate-completion")
             .short("g")
             .long("generate-completion")
+            .value_name("shell")
             .help("Generates a completion script for the specified shell")
             .conflicts_with("music-dir")
             .takes_value(true)
-            .value_name("shell")
             .possible_values(&Shell::variants())
         );
 
