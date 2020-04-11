@@ -1,13 +1,14 @@
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::str::FromStr;
 
-use clap::{App, Arg};
+use clap::{App, Arg, Shell};
 use walkdir::WalkDir;
 
 use crate::playlist::Playlist;
-use std::ffi::OsStr;
 
 mod playlist;
 mod metadata;
@@ -28,12 +29,13 @@ fn main() {
         .version("1.0-beta")
         .author("Tobias Schmitz")
         .about("Finds the local paths to your playlists' songs.")
-        .arg(Arg::with_name("root-dir")
-            .short("r")
-            .long("root-dir")
+        .arg(Arg::with_name("music-dir")
+            .short("m")
+            .long("music-dir")
             .help("The directory which will be searched for playlists and music files")
             .takes_value(true)
-            .required(true))
+            .required_unless("generate-completion")
+            .conflicts_with("generate-completion"))
         .arg(Arg::with_name("output-dir")
             .short("o")
             .long("output-dir")
@@ -55,23 +57,27 @@ fn main() {
         .arg(Arg::with_name("generate-completion")
             .short("g")
             .long("generate-completion")
-            .help("Generate a completion script for your shell")
-            .possible_value("bash")
-            .possible_value("elvish")
-            .possible_value("fish")
-            .possible_value("powershell")
-            .possible_value("zsh")
+            .help("Generates a completion script for the specified shell")
+            .conflicts_with("music-dir")
+            .takes_value(true)
+            .value_name("shell")
+            .possible_values(&Shell::variants())
         );
 
-    let matches = app.get_matches();
+    let matches = app.clone().get_matches();
 
-    let root_dir = PathBuf::from(matches.value_of("root-dir").unwrap());
+    let root_dir = PathBuf::from(matches.value_of("music-dir").unwrap_or(""));
     let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
     let format = matches.value_of("format").unwrap_or("m3u");
     let extension = matches.value_of("output-file-extension").unwrap_or("");
     let generate_completion = matches.value_of("generate-completion").unwrap_or("");
 
     if generate_completion != "" {
+        let shell = Shell::from_str(generate_completion).unwrap();
+
+        app.clone().gen_completions("playlist_localizer", shell, output_dir);
+
+        exit(0);
     }
 
     println!("indexing...");
