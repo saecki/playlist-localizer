@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -67,7 +68,7 @@ fn main() {
 
     let matches = app.clone().get_matches();
 
-    let root_dir = PathBuf::from(matches.value_of("music-dir").unwrap_or(""));
+    let music_dir = PathBuf::from(matches.value_of("music-dir").unwrap_or(""));
     let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
     let format = matches.value_of("format").unwrap_or("m3u");
     let extension = matches.value_of("output-file-extension").unwrap_or("");
@@ -82,9 +83,7 @@ fn main() {
     }
 
     println!("indexing...");
-    let indexes = index(&root_dir);
-    let music_index = indexes.0;
-    let playlist_index = indexes.1;
+    let (music_index, playlist_index) = index(&music_dir);
 
     println!("searching playlists...");
     let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
@@ -107,21 +106,21 @@ fn main() {
         p.write_to(&output_dir, format, extension);
     }
 
-    println!("done")
+    println!("done");
 }
 
-fn index(root_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let abs_root_path = match root_dir.canonicalize() {
+fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let abs_music_path = match canonicalize(music_dir) {
         Ok(t) => t,
         Err(e) => {
-            println!("Not a valid root path: {}\n{:?}", root_dir.display(), e);
+            println!("Not a valid music dir path: {}\n{:?}", music_dir.display(), e);
             exit(1)
         }
     };
     let mut music_index = Vec::new();
     let mut playlist_index = Vec::new();
 
-    for d in WalkDir::new(abs_root_path).into_iter()
+    for d in WalkDir::new(abs_music_path).into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| match e.metadata() {
             Ok(m) => m.is_file(),
@@ -179,7 +178,6 @@ fn matches_extension(s: &OsStr) -> i8 {
             return 1;
         }
     }
-
     for e in &PLAYLIST_FILE_EXTENSIONS {
         if s.eq(*e) {
             return 2;
@@ -225,4 +223,16 @@ fn match_file_extension<'index>(index: &'index Vec<PathBuf>, extension: &str) ->
     }
 
     results
+}
+
+#[cfg(not(target_os = "windows"))]
+fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
+    path.canonicalize()
+}
+
+#[cfg(target_os = "windows")]
+fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
+    let mut string = path.canonicalize()?.display().to_string();
+
+    PathBuf::from(string.replace("\\\\?\\", ""))
 }
