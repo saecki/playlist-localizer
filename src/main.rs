@@ -151,7 +151,7 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
 
         for l in contents.lines() {
             if !l.starts_with("#EXT") {
-                results.push(PathBuf::from(l));
+                results.push(platform_path(l));
             }
         }
     }
@@ -235,4 +235,16 @@ fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
     let mut string = path.canonicalize()?.display().to_string();
 
     PathBuf::from(string.replace("\\\\?\\", ""))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn platform_path(string: &str) -> PathBuf {
+    let path = string.replace("\\", "/");
+    PathBuf::from(path)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_path(string: &str) -> PathBuf {
+    let path = string.replace("/", "\\");
+    PathBuf::from(path)
 }
