@@ -232,9 +232,9 @@ fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
-    let mut string = path.canonicalize()?.display().to_string();
+    let string = path.canonicalize()?.display().to_string();
 
-    PathBuf::from(string.replace("\\\\?\\", ""))
+    Ok(PathBuf::from(string.replace("\\\\?\\", "")))
 }
 
 #[cfg(not(target_os = "windows"))]
