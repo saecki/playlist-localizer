@@ -8,6 +8,7 @@ const EXTM3U_SONG_PATTERN: &str = "
 #EXTINF:<duration>,<artist> - <title>
 <path>";
 
+#[derive(Debug)]
 pub struct Playlist {
     name: String,
     songs: Vec<PathBuf>,

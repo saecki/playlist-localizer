@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
@@ -96,7 +96,9 @@ fn main() {
 
         if let Some(stem) = p.file_stem() {
             if let Some(name) = stem.to_str() {
-                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
+                playlists.push(
+                    m3u_playlist(&music_index, &file_paths, name.to_string())
+                );
             }
         }
     }
@@ -120,21 +122,19 @@ fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut music_index = Vec::new();
     let mut playlist_index = Vec::new();
 
-    for d in WalkDir::new(abs_music_path).into_iter()
+    WalkDir::new(abs_music_path).into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| match e.metadata() {
             Ok(m) => m.is_file(),
             Err(_e) => false,
         })
-    {
-        if let Some(extension) = d.path().extension() {
+        .for_each(|d| if let Some(extension) = d.path().extension() {
             match matches_extension(extension) {
                 1 => music_index.push(d.into_path()),
                 2 => playlist_index.push(d.into_path()),
                 _ => (),
             }
-        }
-    }
+        });
 
     (music_index, playlist_index)
 }
@@ -189,16 +189,17 @@ fn matches_extension(s: &OsStr) -> i8 {
 
 #[inline]
 fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Option<&'index PathBuf> {
-    let mut best_result: (u8, Option<&PathBuf>) = (0u8, None);
+    let mut best_result = (0, None);
+
+    let components: Vec<Component> = file_path.components().rev().collect();
 
     for p in index {
         let mut local_components = p.components().rev();
-        let mut components = file_path.components().rev();
 
         let mut i = 0_u8;
         while let Some(lc) = local_components.next() {
-            if let Some(c) = components.next() {
-                if lc != c {
+            if let Some(c) = components.iter().next() {
+                if &lc != c {
                     if i != 0 && i > best_result.0 {
                         best_result = (i, Some(p));
                     }
