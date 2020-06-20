@@ -8,6 +8,6 @@ edition = "2018"
 
 [dependencies]
 walkdir = "2.3.1"
-clap = "2.33.0"
-id3 = "0.5.0"
-mp4ameta = "0.2.0"
+clap = "2.33.1"
+id3 = "0.5.1"
+mp4ameta = "0.2.2"
