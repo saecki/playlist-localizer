@@ -13,7 +13,7 @@ case "$SHELL" in
 	sudo /usr/local/bin/playlist_localizer -g "bash" -o /etc/bash_completion.d/
 	;;
     *)
-	echo "create a completion script for your shell manually"
+	echo "create a completion script for your shell manually by running 'playlist_localizer --generate-completion <shell>'"
 	;;
 esac
 
