@@ -1,6 +1,4 @@
 use std::path::Path;
-use id3;
-use mp4ameta;
 
 pub struct SongMetadata {
     pub title: String,
@@ -14,7 +12,7 @@ impl SongMetadata {
     }
 
     pub fn from(path: &Path) -> SongMetadata {
-        return if let Ok(tag) = id3::Tag::read_from_path(path) {
+        if let Ok(tag) = id3::Tag::read_from_path(path) {
             SongMetadata {
                 title: tag.title().unwrap_or("").to_string(),
                 artist: tag.artist().unwrap_or("").to_string(),
@@ -28,6 +26,6 @@ impl SongMetadata {
             }
         } else {
             SongMetadata::new()
-        };
+        }
     }
 }

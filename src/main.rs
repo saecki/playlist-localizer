@@ -159,11 +159,11 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
     results
 }
 
-fn m3u_playlist(index: &Vec<PathBuf>, file_paths: &Vec<PathBuf>, name: String) -> Playlist {
+fn m3u_playlist(index: &[PathBuf], file_paths: &[PathBuf], name: String) -> Playlist {
     let mut playlist = Playlist::new(name);
 
     for f in file_paths {
-        if let Some(s) = match_file(&index, f) {
+        if let Some(s) = match_file(index, f) {
             playlist.add(PathBuf::from(s));
         }
     }
@@ -184,20 +184,19 @@ fn matches_extension(s: &OsStr) -> i8 {
         }
     }
 
-    return 0;
+    0
 }
 
 #[inline]
-fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Option<&'index PathBuf> {
+fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&'index PathBuf> {
     let mut best_result = (0, None);
 
     let components: Vec<Component> = file_path.components().rev().collect();
 
     for p in index {
-        let mut local_components = p.components().rev();
+        let local_components = p.components().rev();
 
-        let mut i = 0_u8;
-        while let Some(lc) = local_components.next() {
+        for (i, lc) in local_components.enumerate() {
             if let Some(c) = components.iter().next() {
                 if &lc != c {
                     if i != 0 && i > best_result.0 {
@@ -206,20 +205,18 @@ fn match_file<'index>(index: &'index Vec<PathBuf>, file_path: &PathBuf) -> Optio
                     break;
                 }
             }
-            i += 1;
         }
     }
 
     best_result.1
 }
 
-fn match_file_extension<'index>(index: &'index Vec<PathBuf>, extension: &str) -> Vec<&'index PathBuf> {
+fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Vec<&'index PathBuf> {
     let mut results: Vec<&PathBuf> = Vec::new();
 
     for p in index {
-        match p.extension() {
-            Some(e) => if e.eq(extension) { results.push(p) },
-            None => (),
+        if let Some(e) = p.extension() {
+            if e.eq(extension) { results.push(p) }
         }
     }
 
