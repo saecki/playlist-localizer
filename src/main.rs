@@ -11,18 +11,10 @@ use walkdir::WalkDir;
 
 use crate::playlist::Playlist;
 
-mod playlist;
 mod metadata;
+mod playlist;
 
-const MUSIC_FILE_EXTENSIONS: [&str; 7] = [
-    "aac",
-    "flac",
-    "m4a",
-    "m4b",
-    "mp3",
-    "ogg",
-    "opus",
-];
+const MUSIC_FILE_EXTENSIONS: [&str; 7] = ["aac", "flac", "m4a", "m4b", "mp3", "ogg", "opus"];
 const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
 
 fn main() {
@@ -30,40 +22,49 @@ fn main() {
         .version("0.2.0")
         .author("Saecki")
         .about("Finds the local paths to your playlists' songs.")
-        .arg(Arg::with_name("music-dir")
-            .short("m")
-            .long("music-dir")
-            .help("The directory which will be searched for playlists and music files")
-            .takes_value(true)
-            .required_unless("generate-completion")
-            .conflicts_with("generate-completion"))
-        .arg(Arg::with_name("output-dir")
-            .short("o")
-            .long("output-dir")
-            .help("The directory which the playlists will be written to")
-            .takes_value(true)
-            .required(true))
-        .arg(Arg::with_name("format")
-            .short("f")
-            .long("format")
-            .help("The wanted output format")
-            .takes_value(true)
-            .possible_value("m3u")
-            .possible_value("extm3u"))
-        .arg(Arg::with_name("output-file-extension")
-            .short("e")
-            .long("output-file-extension")
-            .value_name("extension")
-            .help("The file extension of the output playlist files")
-            .takes_value(true))
-        .arg(Arg::with_name("generate-completion")
-            .short("g")
-            .long("generate-completion")
-            .value_name("shell")
-            .help("Generates a completion script for the specified shell")
-            .conflicts_with("music-dir")
-            .takes_value(true)
-            .possible_values(&Shell::variants())
+        .arg(
+            Arg::with_name("music-dir")
+                .short("m")
+                .long("music-dir")
+                .help("The directory which will be searched for playlists and music files")
+                .takes_value(true)
+                .required_unless("generate-completion")
+                .conflicts_with("generate-completion"),
+        )
+        .arg(
+            Arg::with_name("output-dir")
+                .short("o")
+                .long("output-dir")
+                .help("The directory which the playlists will be written to")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("format")
+                .short("f")
+                .long("format")
+                .help("The wanted output format")
+                .takes_value(true)
+                .possible_value("m3u")
+                .possible_value("extm3u"),
+        )
+        .arg(
+            Arg::with_name("output-file-extension")
+                .short("e")
+                .long("output-file-extension")
+                .value_name("extension")
+                .help("The file extension of the output playlist files")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("generate-completion")
+                .short("g")
+                .long("generate-completion")
+                .value_name("shell")
+                .help("Generates a completion script for the specified shell")
+                .conflicts_with("music-dir")
+                .takes_value(true)
+                .possible_values(&Shell::variants()),
         );
 
     let matches = app.clone().get_matches();
@@ -77,7 +78,8 @@ fn main() {
     if generate_completion != "" {
         let shell = Shell::from_str(generate_completion).unwrap();
 
-        app.clone().gen_completions("playlist_localizer", shell, output_dir);
+        app.clone()
+            .gen_completions("playlist_localizer", shell, output_dir);
 
         exit(0);
     }
@@ -96,9 +98,7 @@ fn main() {
 
         if let Some(stem) = p.file_stem() {
             if let Some(name) = stem.to_str() {
-                playlists.push(
-                    m3u_playlist(&music_index, &file_paths, name.to_string())
-                );
+                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
             }
         }
     }
@@ -115,24 +115,31 @@ fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let abs_music_path = match canonicalize(music_dir) {
         Ok(t) => t,
         Err(e) => {
-            println!("Not a valid music dir path: {}\n{:?}", music_dir.display(), e);
+            println!(
+                "Not a valid music dir path: {}\n{:?}",
+                music_dir.display(),
+                e
+            );
             exit(1)
         }
     };
     let mut music_index = Vec::new();
     let mut playlist_index = Vec::new();
 
-    WalkDir::new(abs_music_path).into_iter()
+    WalkDir::new(abs_music_path)
+        .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| match e.metadata() {
             Ok(m) => m.is_file(),
             Err(_e) => false,
         })
-        .for_each(|d| if let Some(extension) = d.path().extension() {
-            match matches_extension(extension) {
-                1 => music_index.push(d.into_path()),
-                2 => playlist_index.push(d.into_path()),
-                _ => (),
+        .for_each(|d| {
+            if let Some(extension) = d.path().extension() {
+                match matches_extension(extension) {
+                    1 => music_index.push(d.into_path()),
+                    2 => playlist_index.push(d.into_path()),
+                    _ => (),
+                }
             }
         });
 
@@ -197,7 +204,7 @@ fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&
         let local_components = p.components().rev();
 
         for (i, lc) in local_components.enumerate() {
-            if let Some(c) = components.iter().next() {
+            if let Some(c) = components.get(0) {
                 if &lc != c {
                     if i != 0 && i > best_result.0 {
                         best_result = (i, Some(p));
@@ -216,7 +223,9 @@ fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Ve
 
     for p in index {
         if let Some(e) = p.extension() {
-            if e.eq(extension) { results.push(p) }
+            if e.eq(extension) {
+                results.push(p)
+            }
         }
     }
 
