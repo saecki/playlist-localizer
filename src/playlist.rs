@@ -16,7 +16,10 @@ pub struct Playlist {
 
 impl Playlist {
     pub fn new(name: String) -> Playlist {
-        Playlist { name, songs: Vec::new() }
+        Playlist {
+            name,
+            songs: Vec::new(),
+        }
     }
 
     pub fn add(&mut self, song: PathBuf) {
@@ -36,7 +39,7 @@ impl Playlist {
 
         match r {
             Ok(_) => (),
-            Err(e) => println!("Couldn't write playlist because:\n{:?}", e)
+            Err(e) => println!("Couldn't write playlist because:\n{:?}", e),
         }
     }
 

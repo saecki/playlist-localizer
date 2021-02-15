@@ -1,35 +1,38 @@
 use std::path::Path;
 
+#[derive(Debug, Default)]
 pub struct SongMetadata {
     pub title: String,
     pub artist: String,
-    pub duration: u32,
+    pub duration: u64,
 }
 
 impl SongMetadata {
-    pub fn new() -> SongMetadata {
-        SongMetadata {
+    pub fn new() -> Self {
+        Self {
             title: String::new(),
             artist: String::new(),
             duration: 0,
         }
     }
+}
 
-    pub fn from(path: &Path) -> SongMetadata {
-        if let Ok(tag) = id3::Tag::read_from_path(path) {
-            SongMetadata {
+impl<T: AsRef<Path>> From<T> for SongMetadata {
+    fn from(path: T) -> Self {
+        if let Ok(tag) = id3::Tag::read_from_path(path.as_ref()) {
+            Self {
                 title: tag.title().unwrap_or("").to_string(),
                 artist: tag.artist().unwrap_or("").to_string(),
-                duration: tag.duration().unwrap_or(0) as u32 / 1000,
+                duration: tag.duration().unwrap_or(0) as u64 / 1000,
             }
-        } else if let Ok(mut tag) = mp4ameta::Tag::read_from_path(path) {
-            SongMetadata {
+        } else if let Ok(mut tag) = mp4ameta::Tag::read_from_path(path.as_ref()) {
+            Self {
                 title: tag.take_title().unwrap_or(String::new()),
                 artist: tag.take_artist().unwrap_or(String::new()),
-                duration: tag.duration().unwrap_or(0.0).round() as u32,
+                duration: tag.duration().map(|d| d.as_secs()).unwrap_or(0),
             }
         } else {
-            SongMetadata::new()
+            Self::new()
         }
     }
 }

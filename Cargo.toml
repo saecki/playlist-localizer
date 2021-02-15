@@ -1,11 +1,12 @@
 [package]
 name = "playlist_localizer"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Saecki <tobiasschmitz2001@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+clap = { git = "https://github.com/clap-rs/clap" }
+clap_generate = { git = "https://github.com/clap-rs/clap" }
+id3 = "0.6.2"
+mp4ameta = "0.9.1"
 walkdir = "2.3.1"
-clap = "2.33.3"
-id3 = "0.5.1"
-mp4ameta = "0.8.0"
