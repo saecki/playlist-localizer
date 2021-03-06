@@ -5,8 +5,8 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::exit;
 
-use clap::{App, Arg};
-use clap_generate::generate_to;
+use clap::{App, Arg, ValueHint};
+use clap_generate::generate;
 use clap_generate::generators::{Bash, Elvish, Fish, PowerShell, Zsh};
 use walkdir::WalkDir;
 
@@ -36,18 +36,21 @@ fn main() {
             Arg::new("music-dir")
                 .short('m')
                 .long("music-dir")
-                .long_about("The directory which will be searched for playlists and music files")
+                .about("The directory which will be searched for playlists and music files")
                 .takes_value(true)
                 .required_unless_present("generate-completion")
-                .conflicts_with("generate-completion"),
+                .conflicts_with("generate-completion")
+                .value_hint(ValueHint::DirPath),
         )
         .arg(
             Arg::new("output-dir")
                 .short('o')
                 .long("output-dir")
-                .long_about("The output directory which files will be written to")
+                .about("The output directory which files will be written to")
                 .takes_value(true)
-                .required(true),
+                .required_unless_present("generate-completion")
+                .conflicts_with("generate-completion")
+                .value_hint(ValueHint::DirPath),
         )
         .arg(
             Arg::new("format")
@@ -62,7 +65,7 @@ fn main() {
                 .short('e')
                 .long("output-file-extension")
                 .value_name("extension")
-                .long_about("The file extension of the output playlist files")
+                .about("The file extension of the output playlist files")
                 .takes_value(true),
         )
         .arg(
@@ -70,7 +73,7 @@ fn main() {
                 .short('g')
                 .long("generate-completion")
                 .value_name("shell")
-                .long_about("Generates a completion script for the specified shell\n")
+                .about("Generates a completion script for the specified shell\n")
                 .conflicts_with("music-dir")
                 .takes_value(true)
                 .possible_values(&[BASH, ELVISH, FISH, PWRSH, ZSH]),
@@ -78,23 +81,24 @@ fn main() {
 
     let matches = app.clone().get_matches();
 
-    let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
     let generate_completion = matches.value_of("generate-completion");
 
     if let Some(shell) = generate_completion {
+        let mut stdout = std::io::stdout();
         match shell {
-            BASH => generate_to::<Bash, _, _>(&mut app, BIN_NAME, output_dir),
-            ELVISH => generate_to::<Elvish, _, _>(&mut app, BIN_NAME, output_dir),
-            FISH => generate_to::<Fish, _, _>(&mut app, BIN_NAME, output_dir),
-            ZSH => generate_to::<Zsh, _, _>(&mut app, BIN_NAME, output_dir),
-            PWRSH => generate_to::<PowerShell, _, _>(&mut app, BIN_NAME, output_dir),
+            BASH => generate::<Bash, _>(&mut app, BIN_NAME, &mut stdout),
+            ELVISH => generate::<Elvish, _>(&mut app, BIN_NAME, &mut stdout),
+            FISH => generate::<Fish, _>(&mut app, BIN_NAME, &mut stdout),
+            ZSH => generate::<Zsh, _>(&mut app, BIN_NAME, &mut stdout),
+            PWRSH => generate::<PowerShell, _>(&mut app, BIN_NAME, &mut stdout),
             _ => unreachable!(),
         }
 
         exit(0);
     }
 
-    let music_dir = PathBuf::from(matches.value_of("music-dir").unwrap_or(""));
+    let music_dir = PathBuf::from(matches.value_of("music-dir").unwrap());
+    let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
     let format = matches.value_of("format").unwrap_or("m3u");
     let extension = matches.value_of("output-file-extension").unwrap_or("");
 
