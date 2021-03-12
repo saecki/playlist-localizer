@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::exit;
 
-use clap::{App, Arg, ValueHint};
+use clap::{crate_authors, crate_version, App, Arg, ValueHint};
 use clap_generate::generate;
 use clap_generate::generators::{Bash, Elvish, Fish, PowerShell, Zsh};
 use walkdir::WalkDir;
@@ -28,9 +28,8 @@ const ZSH: &str = "zsh";
 
 fn main() {
     let mut app = App::new("playlist localizer")
-        .bin_name(BIN_NAME)
-        .version("0.3.0")
-        .author("Saecki")
+        .version(crate_version!())
+        .author(crate_authors!())
         .about("Finds the local paths to your playlists' songs.")
         .arg(
             Arg::new("music-dir")
@@ -93,7 +92,6 @@ fn main() {
             PWRSH => generate::<PowerShell, _>(&mut app, BIN_NAME, &mut stdout),
             _ => unreachable!(),
         }
-
         exit(0);
     }
 
