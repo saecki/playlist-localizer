@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use clap::{crate_authors, crate_version, App, Arg, ValueHint};
@@ -210,32 +210,59 @@ fn matches_extension(s: &OsStr) -> i8 {
     0
 }
 
+#[derive(Debug, Default, Clone)]
+struct FileMatch<'a> {
+    extension_matches: bool,
+    matching_components: usize,
+    path: Option<&'a Path>,
+}
+
 #[inline]
-fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&'index PathBuf> {
-    let mut best_result = (0, None);
+fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&'index Path> {
+    let mut best_result = FileMatch::default();
 
-    let components: Vec<Component> = file_path.components().rev().collect();
-
-    for p in index {
-        let local_components = p.components().rev();
-
-        for (i, lc) in local_components.enumerate() {
-            if let Some(c) = components.get(0) {
-                if &lc != c {
-                    if i != 0 && i > best_result.0 {
-                        best_result = (i, Some(p));
+    for local_path in index {
+        match (
+            file_path.file_stem(),
+            file_path.extension(),
+            local_path.file_stem(),
+            local_path.extension(),
+        ) {
+            (Some(ls), Some(le), Some(s), Some(e)) => {
+                if ls == s {
+                    let mut fm = FileMatch {
+                        path: Some(&local_path),
+                        ..Default::default()
+                    };
+                    let local_components = local_path.components().rev().skip(1);
+                    let components = file_path.components().rev().skip(1);
+                    for (i, (lc, c)) in local_components.zip(components).enumerate() {
+                        if lc != c {
+                            fm.matching_components = i;
+                            break;
+                        }
                     }
-                    break;
+
+                    fm.extension_matches = le == e;
+
+                    if best_result.matching_components < fm.matching_components {
+                        best_result = fm;
+                    } else if best_result.matching_components == fm.matching_components {
+                        if !best_result.extension_matches && fm.extension_matches {
+                            best_result = fm;
+                        }
+                    }
                 }
             }
+            _ => continue,
         }
     }
 
-    best_result.1
+    best_result.path
 }
 
-fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Vec<&'index PathBuf> {
-    let mut results: Vec<&PathBuf> = Vec::new();
+fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Vec<&'index Path> {
+    let mut results: Vec<&Path> = Vec::new();
 
     for p in index {
         if let Some(e) = p.extension() {
