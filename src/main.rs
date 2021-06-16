@@ -13,7 +13,7 @@ use crate::playlist::Playlist;
 mod metadata;
 mod playlist;
 
-const BIN_NAME: &str = "playlist_localizer";
+const BIN_NAME: &str = "playlist-localizer";
 
 const MUSIC_EXTENSIONS: [&str; 7] = ["aac", "flac", "m4a", "m4b", "mp3", "ogg", "opus"];
 const PLAYLIST_EXTENSIONS: [&str; 1] = ["m3u"];
