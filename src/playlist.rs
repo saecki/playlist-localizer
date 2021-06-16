@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::metadata::SongMetadata;
 
@@ -9,21 +9,14 @@ const EXTM3U_SONG_PATTERN: &str = "
 <path>";
 
 #[derive(Debug)]
-pub struct Playlist {
+pub struct Playlist<'a> {
     name: String,
-    songs: Vec<PathBuf>,
+    songs: Vec<&'a Path>,
 }
 
-impl Playlist {
-    pub fn new(name: String) -> Playlist {
-        Playlist {
-            name,
-            songs: Vec::new(),
-        }
-    }
-
-    pub fn add(&mut self, song: PathBuf) {
-        self.songs.push(song);
+impl<'a> Playlist<'a> {
+    pub fn new(name: String, songs: Vec<&'a Path>) -> Self {
+        Playlist { name, songs }
     }
 
     pub fn write_to(&mut self, path: &Path, format: &str, extension: &str) {

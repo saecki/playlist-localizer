@@ -7,16 +7,6 @@ pub struct SongMetadata {
     pub duration: u64,
 }
 
-impl SongMetadata {
-    pub fn new() -> Self {
-        Self {
-            title: String::new(),
-            artist: String::new(),
-            duration: 0,
-        }
-    }
-}
-
 impl<T: AsRef<Path>> From<T> for SongMetadata {
     fn from(path: T) -> Self {
         if let Ok(tag) = id3::Tag::read_from_path(path.as_ref()) {
@@ -32,7 +22,7 @@ impl<T: AsRef<Path>> From<T> for SongMetadata {
                 duration: tag.duration().map(|d| d.as_secs()).unwrap_or(0),
             }
         } else {
-            Self::new()
+            Self::default()
         }
     }
 }

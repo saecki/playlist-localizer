@@ -1,11 +1,9 @@
 use std::ffi::OsStr;
-use std::fs::File;
 use std::io;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use clap::{crate_authors, crate_version, App, Arg, ValueHint};
+use clap::{crate_authors, crate_version, App, AppSettings, Arg, ValueHint};
 use clap_generate::generate;
 use clap_generate::generators::{Bash, Elvish, Fish, PowerShell, Zsh};
 use walkdir::WalkDir;
@@ -17,8 +15,9 @@ mod playlist;
 
 const BIN_NAME: &str = "playlist_localizer";
 
-const MUSIC_FILE_EXTENSIONS: [&str; 7] = ["aac", "flac", "m4a", "m4b", "mp3", "ogg", "opus"];
-const PLAYLIST_FILE_EXTENSIONS: [&str; 1] = ["m3u"];
+const MUSIC_EXTENSIONS: [&str; 7] = ["aac", "flac", "m4a", "m4b", "mp3", "ogg", "opus"];
+const PLAYLIST_EXTENSIONS: [&str; 1] = ["m3u"];
+const PLAYLIST_EXTENSION_M3U: &str = "m3u";
 
 const BASH: &str = "bash";
 const ELVISH: &str = "elvish";
@@ -28,6 +27,8 @@ const ZSH: &str = "zsh";
 
 fn main() {
     let mut app = App::new("playlist localizer")
+        .setting(AppSettings::ColoredHelp)
+        .setting(AppSettings::ColorAuto)
         .version(crate_version!())
         .author(crate_authors!())
         .about("Finds the local paths to your playlists' songs.")
@@ -72,7 +73,7 @@ fn main() {
                 .short('g')
                 .long("generate-completion")
                 .value_name("shell")
-                .about("Generates a completion script for the specified shell\n")
+                .about("Generates a completion script for the specified shell")
                 .conflicts_with("music-dir")
                 .takes_value(true)
                 .possible_values(&[BASH, ELVISH, FISH, PWRSH, ZSH]),
@@ -104,20 +105,18 @@ fn main() {
     let (music_index, playlist_index) = index(&music_dir);
 
     println!("searching playlists...");
-    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_FILE_EXTENSIONS[0]);
+    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_EXTENSION_M3U);
 
     println!("localizing songs...");
-    let mut playlists: Vec<Playlist> = Vec::new();
+    let playlists: Vec<Playlist> = m3u_playlists
+        .into_iter()
+        .filter_map(|p| {
+            let file_paths = m3u_playlist_paths(p);
+            let name = p.file_stem().and_then(|s| s.to_str());
 
-    for p in m3u_playlists {
-        let file_paths = m3u_playlist_paths(p);
-
-        if let Some(stem) = p.file_stem() {
-            if let Some(name) = stem.to_str() {
-                playlists.push(m3u_playlist(&music_index, &file_paths, name.to_string()));
-            }
-        }
-    }
+            name.map(|s| m3u_playlist(&music_index, &file_paths, s.to_string()))
+        })
+        .collect();
 
     println!("writing playlists...");
     for mut p in playlists {
@@ -151,10 +150,10 @@ fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
         })
         .for_each(|d| {
             if let Some(extension) = d.path().extension() {
-                match matches_extension(extension) {
-                    1 => music_index.push(d.into_path()),
-                    2 => playlist_index.push(d.into_path()),
-                    _ => (),
+                match Extension::of(extension) {
+                    Extension::Music => music_index.push(d.into_path()),
+                    Extension::Playlist => playlist_index.push(d.into_path()),
+                    Extension::Unknown => (),
                 }
             }
         });
@@ -164,14 +163,7 @@ fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
 
 fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
     let mut results: Vec<PathBuf> = Vec::new();
-    if let Ok(mut file) = File::open(playlist_path) {
-        let mut contents = String::new();
-        let r = file.read_to_string(&mut contents);
-
-        if r.is_err() {
-            return results;
-        }
-
+    if let Ok(contents) = std::fs::read_to_string(playlist_path) {
         for l in contents.lines() {
             if !l.starts_with("#EXT") {
                 results.push(platform_path(l));
@@ -182,32 +174,38 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
     results
 }
 
-fn m3u_playlist(index: &[PathBuf], file_paths: &[PathBuf], name: String) -> Playlist {
-    let mut playlist = Playlist::new(name);
+fn m3u_playlist<'a>(index: &'a [PathBuf], file_paths: &[PathBuf], name: String) -> Playlist<'a> {
+    let songs = file_paths
+        .iter()
+        .filter_map(|p| match_file(index, p))
+        .collect();
 
-    for f in file_paths {
-        if let Some(s) = match_file(index, f) {
-            playlist.add(PathBuf::from(s));
-        }
-    }
-
-    playlist
+    Playlist::new(name, songs)
 }
 
-#[inline]
-fn matches_extension(s: &OsStr) -> i8 {
-    for e in &MUSIC_FILE_EXTENSIONS {
-        if s.eq(*e) {
-            return 1;
-        }
-    }
-    for e in &PLAYLIST_FILE_EXTENSIONS {
-        if s.eq(*e) {
-            return 2;
-        }
-    }
+#[derive(Clone, Copy, Debug)]
+enum Extension {
+    Music,
+    Playlist,
+    Unknown,
+}
 
-    0
+impl Extension {
+    #[inline]
+    fn of(s: &OsStr) -> Extension {
+        for e in MUSIC_EXTENSIONS.iter() {
+            if s.eq(*e) {
+                return Extension::Music;
+            }
+        }
+        for e in PLAYLIST_EXTENSIONS.iter() {
+            if s.eq(*e) {
+                return Extension::Playlist;
+            }
+        }
+
+        Extension::Unknown
+    }
 }
 
 #[derive(Debug, Default, Clone)]
