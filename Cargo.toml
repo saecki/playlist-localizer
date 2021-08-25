@@ -5,8 +5,8 @@ authors = ["Saecki <tobiasschmitz2001@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-clap = { version = "3.0.0-beta.2", features = ["wrap_help"] }
-clap_generate = "3.0.0-beta.2"
+clap = { version = "3.0.0-beta.4", features = ["wrap_help"] }
+clap_generate = "3.0.0-beta.4"
 id3 = "0.6.4"
 mp4ameta = "0.11.0"
 walkdir = "2.3.2"
