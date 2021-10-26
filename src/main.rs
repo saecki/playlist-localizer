@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use clap::{crate_authors, crate_version, App, AppSettings, Arg, ValueHint};
+use clap::{crate_authors, crate_version, App, Arg, ColorChoice, ValueHint};
 use clap_generate::generate;
 use clap_generate::generators::{Bash, Elvish, Fish, PowerShell, Zsh};
 use walkdir::WalkDir;
@@ -27,8 +27,7 @@ const ZSH: &str = "zsh";
 
 fn main() {
     let mut app = App::new("playlist localizer")
-        .setting(AppSettings::ColoredHelp)
-        .setting(AppSettings::ColorAuto)
+        .color(ColorChoice::Auto)
         .version(crate_version!())
         .author(crate_authors!())
         .about("Finds the local paths to your playlists' songs.")
@@ -86,11 +85,11 @@ fn main() {
     if let Some(shell) = generate_completion {
         let mut stdout = std::io::stdout();
         match shell {
-            BASH => generate::<Bash, _>(&mut app, BIN_NAME, &mut stdout),
-            ELVISH => generate::<Elvish, _>(&mut app, BIN_NAME, &mut stdout),
-            FISH => generate::<Fish, _>(&mut app, BIN_NAME, &mut stdout),
-            ZSH => generate::<Zsh, _>(&mut app, BIN_NAME, &mut stdout),
-            PWRSH => generate::<PowerShell, _>(&mut app, BIN_NAME, &mut stdout),
+            BASH => generate(Bash, &mut app, BIN_NAME, &mut stdout),
+            ELVISH => generate(Elvish, &mut app, BIN_NAME, &mut stdout),
+            FISH => generate(Fish, &mut app, BIN_NAME, &mut stdout),
+            ZSH => generate(Zsh, &mut app, BIN_NAME, &mut stdout),
+            PWRSH => generate(PowerShell, &mut app, BIN_NAME, &mut stdout),
             _ => unreachable!(),
         }
         exit(0);
