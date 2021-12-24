@@ -58,7 +58,7 @@ impl<'a> Playlist<'a> {
                 .replace("<duration>", &song_metadata.duration.to_string())
                 .replace("<artist>", &song_metadata.artist)
                 .replace("<title>", &song_metadata.title)
-                .replace("<path>", &self.songs[i].to_str().unwrap_or(""));
+                .replace("<path>", self.songs[i].to_str().unwrap_or(""));
 
             content.push_str(&song);
         }

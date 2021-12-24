@@ -35,7 +35,7 @@ fn main() {
             Arg::new("music-dir")
                 .short('m')
                 .long("music-dir")
-                .about("The directory which will be searched for playlists and music files")
+                .help("The directory which will be searched for playlists and music files")
                 .takes_value(true)
                 .required_unless_present("generate-completion")
                 .conflicts_with("generate-completion")
@@ -45,7 +45,7 @@ fn main() {
             Arg::new("output-dir")
                 .short('o')
                 .long("output-dir")
-                .about("The output directory which files will be written to")
+                .help("The output directory which files will be written to")
                 .takes_value(true)
                 .required_unless_present("generate-completion")
                 .conflicts_with("generate-completion")
@@ -55,7 +55,7 @@ fn main() {
             Arg::new("format")
                 .short('f')
                 .long("format")
-                .about("The wanted output format")
+                .help("The wanted output format")
                 .takes_value(true)
                 .possible_values(&["m3u", "extm3u"]),
         )
@@ -64,7 +64,7 @@ fn main() {
                 .short('e')
                 .long("output-file-extension")
                 .value_name("extension")
-                .about("The file extension of the output playlist files")
+                .help("The file extension of the output playlist files")
                 .takes_value(true),
         )
         .arg(
@@ -72,7 +72,7 @@ fn main() {
                 .short('g')
                 .long("generate-completion")
                 .value_name("shell")
-                .about("Generates a completion script for the specified shell")
+                .help("Generates a completion script for the specified shell")
                 .conflicts_with("music-dir")
                 .takes_value(true)
                 .possible_values(&[BASH, ELVISH, FISH, PWRSH, ZSH]),
@@ -125,7 +125,7 @@ fn main() {
     println!("done");
 }
 
-fn index(music_dir: &PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
+fn index(music_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let abs_music_path = match canonicalize(music_dir) {
         Ok(t) => t,
         Err(e) => {
@@ -215,7 +215,7 @@ struct FileMatch<'a> {
 }
 
 #[inline]
-fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&'index Path> {
+fn match_file<'index>(index: &'index [PathBuf], file_path: &Path) -> Option<&'index Path> {
     let mut best_result = FileMatch::default();
 
     for local_path in index {
@@ -228,7 +228,7 @@ fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&
             (Some(ls), Some(le), Some(s), Some(e)) => {
                 if ls == s {
                     let mut fm = FileMatch {
-                        path: Some(&local_path),
+                        path: Some(local_path),
                         ..Default::default()
                     };
                     let local_components = local_path.components().rev().skip(1);
@@ -242,12 +242,12 @@ fn match_file<'index>(index: &'index [PathBuf], file_path: &PathBuf) -> Option<&
 
                     fm.extension_matches = le == e;
 
-                    if best_result.matching_components < fm.matching_components {
+                    if best_result.matching_components < fm.matching_components
+                        || best_result.matching_components == fm.matching_components
+                            && !best_result.extension_matches
+                            && fm.extension_matches
+                    {
                         best_result = fm;
-                    } else if best_result.matching_components == fm.matching_components {
-                        if !best_result.extension_matches && fm.extension_matches {
-                            best_result = fm;
-                        }
                     }
                 }
             }
@@ -273,12 +273,12 @@ fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Ve
 }
 
 #[cfg(not(target_os = "windows"))]
-fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
+fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     path.canonicalize()
 }
 
 #[cfg(target_os = "windows")]
-fn canonicalize(path: &PathBuf) -> io::Result<PathBuf> {
+fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     let string = path.canonicalize()?.display().to_string();
 
     Ok(PathBuf::from(string.replace("\\\\?\\", "")))

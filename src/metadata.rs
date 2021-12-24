@@ -17,8 +17,8 @@ impl<T: AsRef<Path>> From<T> for SongMetadata {
             }
         } else if let Ok(mut tag) = mp4ameta::Tag::read_from_path(path.as_ref()) {
             Self {
-                title: tag.take_title().unwrap_or(String::new()),
-                artist: tag.take_artist().unwrap_or(String::new()),
+                title: tag.take_title().unwrap_or_default(),
+                artist: tag.take_artist().unwrap_or_default(),
                 duration: tag.duration().map(|d| d.as_secs()).unwrap_or(0),
             }
         } else {
