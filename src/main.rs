@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use clap::{crate_authors, crate_version, App, Arg, ColorChoice, ValueHint};
-use clap_generate::generate;
-use clap_generate::generators::{Bash, Elvish, Fish, PowerShell, Zsh};
+use clap_complete::generate;
+use clap_complete::shells::{Bash, Elvish, Fish, Zsh, PowerShell};
 use walkdir::WalkDir;
 
 use crate::playlist::Playlist;
