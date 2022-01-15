@@ -2,7 +2,7 @@
 name = "playlist-localizer"
 version = "0.3.0"
 authors = ["Saecki <tobiasschmitz2001@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 clap = { version = "3.0.7", features = ["wrap_help", "cargo"] }
