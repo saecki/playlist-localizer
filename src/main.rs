@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use clap::{crate_authors, crate_version, App, Arg, ColorChoice, ValueHint};
+use clap::{crate_authors, crate_version, Command, Arg, ColorChoice, ValueHint};
 use clap_complete::generate;
 use clap_complete::shells::{Bash, Elvish, Fish, Zsh, PowerShell};
 use walkdir::WalkDir;
@@ -26,7 +26,7 @@ const PWRSH: &str = "powershell";
 const ZSH: &str = "zsh";
 
 fn main() {
-    let mut app = App::new("playlist localizer")
+    let mut app = Command::new("playlist localizer")
         .color(ColorChoice::Auto)
         .version(crate_version!())
         .author(crate_authors!())
@@ -286,12 +286,12 @@ fn canonicalize(path: &Path) -> io::Result<PathBuf> {
 
 #[cfg(not(target_os = "windows"))]
 fn platform_path(string: &str) -> PathBuf {
-    let path = string.replace("\\", "/");
+    let path = string.replace('\\', "/");
     PathBuf::from(path)
 }
 
 #[cfg(target_os = "windows")]
 fn platform_path(string: &str) -> PathBuf {
-    let path = string.replace("/", "\\");
+    let path = string.replace('/', "\\");
     PathBuf::from(path)
 }
