@@ -2,13 +2,14 @@ use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::str::FromStr;
 
-use clap::{crate_authors, crate_version, Command, Arg, ColorChoice, ValueHint};
+use clap::{crate_authors, crate_version, value_parser, Arg, ColorChoice, Command, ValueHint};
 use clap_complete::generate;
-use clap_complete::shells::{Bash, Elvish, Fish, Zsh, PowerShell};
+use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
 use walkdir::WalkDir;
 
-use crate::playlist::Playlist;
+use crate::playlist::{Playlist, PlaylistFormat};
 
 mod metadata;
 mod playlist;
@@ -17,13 +18,30 @@ const BIN_NAME: &str = "playlist-localizer";
 
 const MUSIC_EXTENSIONS: [&str; 7] = ["aac", "flac", "m4a", "m4b", "mp3", "ogg", "opus"];
 const PLAYLIST_EXTENSIONS: [&str; 1] = ["m3u"];
-const PLAYLIST_EXTENSION_M3U: &str = "m3u";
 
-const BASH: &str = "bash";
-const ELVISH: &str = "elvish";
-const FISH: &str = "fish";
-const PWRSH: &str = "powershell";
-const ZSH: &str = "zsh";
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shell {
+    Bash,
+    Elvish,
+    Fish,
+    Pwrsh,
+    Zsh,
+}
+
+impl FromStr for Shell {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "bash" => Ok(Shell::Bash),
+            "elvish" => Ok(Shell::Elvish),
+            "fish" => Ok(Shell::Fish),
+            "powershell" => Ok(Shell::Pwrsh),
+            "zsh" => Ok(Shell::Zsh),
+            _ => Err("Unknown shell"),
+        }
+    }
+}
 
 fn main() {
     let mut app = Command::new("playlist localizer")
@@ -36,7 +54,7 @@ fn main() {
                 .short('m')
                 .long("music-dir")
                 .help("The directory which will be searched for playlists and music files")
-                .takes_value(true)
+                .num_args(1)
                 .required_unless_present("generate-completion")
                 .conflicts_with("generate-completion")
                 .value_hint(ValueHint::DirPath),
@@ -46,7 +64,7 @@ fn main() {
                 .short('o')
                 .long("output-dir")
                 .help("The output directory which files will be written to")
-                .takes_value(true)
+                .num_args(1)
                 .required_unless_present("generate-completion")
                 .conflicts_with("generate-completion")
                 .value_hint(ValueHint::DirPath),
@@ -56,8 +74,8 @@ fn main() {
                 .short('f')
                 .long("format")
                 .help("The wanted output format")
-                .takes_value(true)
-                .possible_values(&["m3u", "extm3u"]),
+                .num_args(0..1)
+                .value_parser(value_parser!(PlaylistFormat)),
         )
         .arg(
             Arg::new("output-file-extension")
@@ -65,7 +83,7 @@ fn main() {
                 .long("output-file-extension")
                 .value_name("extension")
                 .help("The file extension of the output playlist files")
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
             Arg::new("generate-completion")
@@ -74,41 +92,37 @@ fn main() {
                 .value_name("shell")
                 .help("Generates a completion script for the specified shell")
                 .conflicts_with("music-dir")
-                .takes_value(true)
-                .possible_values(&[BASH, ELVISH, FISH, PWRSH, ZSH]),
+                .num_args(1)
+                .value_parser(value_parser!(Shell)),
         );
 
     let matches = app.clone().get_matches();
 
-    let generate_completion = matches.value_of("generate-completion");
+    let generate_completion = matches.get_one("generate-completion");
 
     if let Some(shell) = generate_completion {
         let mut stdout = std::io::stdout();
         match shell {
-            BASH => generate(Bash, &mut app, BIN_NAME, &mut stdout),
-            ELVISH => generate(Elvish, &mut app, BIN_NAME, &mut stdout),
-            FISH => generate(Fish, &mut app, BIN_NAME, &mut stdout),
-            ZSH => generate(Zsh, &mut app, BIN_NAME, &mut stdout),
-            PWRSH => generate(PowerShell, &mut app, BIN_NAME, &mut stdout),
-            _ => unreachable!(),
+            Shell::Bash => generate(Bash, &mut app, BIN_NAME, &mut stdout),
+            Shell::Elvish => generate(Elvish, &mut app, BIN_NAME, &mut stdout),
+            Shell::Fish => generate(Fish, &mut app, BIN_NAME, &mut stdout),
+            Shell::Zsh => generate(Zsh, &mut app, BIN_NAME, &mut stdout),
+            Shell::Pwrsh => generate(PowerShell, &mut app, BIN_NAME, &mut stdout),
         }
         exit(0);
     }
 
-    let music_dir = PathBuf::from(matches.value_of("music-dir").unwrap());
-    let output_dir = PathBuf::from(matches.value_of("output-dir").unwrap());
-    let format = matches.value_of("format").unwrap_or("m3u");
-    let extension = matches.value_of("output-file-extension").unwrap_or("");
+    let music_dir = matches.get_one::<PathBuf>("music-dir").unwrap();
+    let output_dir = matches.get_one::<PathBuf>("output-dir").unwrap();
+    let format = matches.get_one("format").copied().unwrap_or_default();
+    let extension = matches.get_one("output-file-extension").unwrap_or(&"");
 
     println!("indexing...");
-    let (music_index, playlist_index) = index(&music_dir);
-
-    println!("searching playlists...");
-    let m3u_playlists = match_file_extension(&playlist_index, PLAYLIST_EXTENSION_M3U);
+    let (music_index, playlist_index) = index(music_dir);
 
     println!("localizing songs...");
-    let playlists: Vec<Playlist> = m3u_playlists
-        .into_iter()
+    let playlists: Vec<Playlist> = playlist_index
+        .iter()
         .filter_map(|p| {
             let file_paths = m3u_playlist_paths(p);
             let name = p.file_stem().and_then(|s| s.to_str());
@@ -119,7 +133,7 @@ fn main() {
 
     println!("writing playlists...");
     for mut p in playlists {
-        p.write_to(&output_dir, format, extension);
+        p.write_to(output_dir, format, extension);
     }
 
     println!("done");
@@ -193,12 +207,12 @@ impl Extension {
     #[inline]
     fn of(s: &OsStr) -> Extension {
         for e in MUSIC_EXTENSIONS.iter() {
-            if s.eq(*e) {
+            if s == *e {
                 return Extension::Music;
             }
         }
         for e in PLAYLIST_EXTENSIONS.iter() {
-            if s.eq(*e) {
+            if s == *e {
                 return Extension::Playlist;
             }
         }
@@ -256,20 +270,6 @@ fn match_file<'index>(index: &'index [PathBuf], file_path: &Path) -> Option<&'in
     }
 
     best_result.path
-}
-
-fn match_file_extension<'index>(index: &'index [PathBuf], extension: &str) -> Vec<&'index Path> {
-    let mut results: Vec<&Path> = Vec::new();
-
-    for p in index {
-        if let Some(e) = p.extension() {
-            if e.eq(extension) {
-                results.push(p)
-            }
-        }
-    }
-
-    results
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 
 use crate::metadata::SongMetadata;
 
@@ -14,19 +15,38 @@ pub struct Playlist<'a> {
     songs: Vec<&'a Path>,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum PlaylistFormat {
+    #[default]
+    M3u,
+    Extm3u,
+}
+
+impl FromStr for PlaylistFormat {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "m3u" => Ok(PlaylistFormat::M3u),
+            "extm3u" => Ok(PlaylistFormat::Extm3u),
+            _ => Err("Unknown playlist format"),
+        }
+    }
+}
+
 impl<'a> Playlist<'a> {
     pub fn new(name: String, songs: Vec<&'a Path>) -> Self {
         Playlist { name, songs }
     }
 
-    pub fn write_to(&mut self, path: &Path, format: &str, extension: &str) {
+    pub fn write_to(&mut self, path: &Path, format: PlaylistFormat, extension: &str) {
         let file_path = path.join(&self.name).with_extension(extension);
 
         let r = fs::write(
             file_path,
             match format {
-                "extm3u" => self.to_extm3u(),
-                _ => self.to_m3u(),
+                PlaylistFormat::M3u => self.to_m3u(),
+                PlaylistFormat::Extm3u => self.to_extm3u(),
             },
         );
 
