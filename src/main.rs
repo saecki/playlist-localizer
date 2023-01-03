@@ -75,6 +75,7 @@ fn main() {
                 .long("format")
                 .help("The wanted output format")
                 .num_args(0..1)
+                .default_value("m3u")
                 .value_parser(value_parser!(PlaylistFormat)),
         )
         .arg(
@@ -114,7 +115,7 @@ fn main() {
 
     let music_dir = matches.get_one::<PathBuf>("music-dir").unwrap();
     let output_dir = matches.get_one::<PathBuf>("output-dir").unwrap();
-    let format = matches.get_one("format").copied().unwrap_or_default();
+    let format = matches.get_one("format").copied().unwrap();
     let extension = matches.get_one("output-file-extension").unwrap_or(&"");
 
     println!("indexing...");
