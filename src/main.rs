@@ -113,13 +113,13 @@ fn main() {
         exit(0);
     }
 
-    let music_dir = matches.get_one::<PathBuf>("music-dir").unwrap();
-    let output_dir = matches.get_one::<PathBuf>("output-dir").unwrap();
+    let music_dir = matches.get_one::<String>("music-dir").unwrap();
+    let output_dir = matches.get_one::<String>("output-dir").unwrap();
     let format = matches.get_one("format").copied().unwrap();
     let extension = matches.get_one("output-file-extension").unwrap_or(&"");
 
     println!("indexing...");
-    let (music_index, playlist_index) = index(music_dir);
+    let (music_index, playlist_index) = index(music_dir.as_ref());
 
     println!("localizing songs...");
     let playlists: Vec<Playlist> = playlist_index
@@ -134,7 +134,7 @@ fn main() {
 
     println!("writing playlists...");
     for mut p in playlists {
-        p.write_to(output_dir, format, extension);
+        p.write_to(output_dir.as_ref(), format, extension);
     }
 
     println!("done");
