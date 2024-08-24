@@ -1,4 +1,6 @@
-use std::ffi::OsStr;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -140,7 +142,7 @@ fn main() {
     println!("done");
 }
 
-fn index(music_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+fn index(music_dir: &Path) -> (HashMap<OsString, Vec<PathBuf>>, Vec<PathBuf>) {
     let abs_music_path = match canonicalize(music_dir) {
         Ok(t) => t,
         Err(e) => {
@@ -152,25 +154,36 @@ fn index(music_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
             exit(1)
         }
     };
-    let mut music_index = Vec::new();
+    let mut music_index = HashMap::<OsString, Vec<PathBuf>>::new();
     let mut playlist_index = Vec::new();
 
-    WalkDir::new(abs_music_path)
+    let iter = WalkDir::new(abs_music_path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| match e.metadata() {
             Ok(m) => m.is_file(),
             Err(_e) => false,
-        })
-        .for_each(|d| {
-            if let Some(extension) = d.path().extension() {
-                match Extension::of(extension) {
-                    Extension::Music => music_index.push(d.into_path()),
-                    Extension::Playlist => playlist_index.push(d.into_path()),
-                    Extension::Unknown => (),
-                }
-            }
         });
+    for d in iter {
+        let path = d.into_path();
+        if let Some(extension) = path.extension() {
+            let Some(file_stem) = path.file_stem() else {
+                continue;
+            };
+            match Extension::of(extension) {
+                Extension::Music => match music_index.entry(file_stem.to_owned()) {
+                    Entry::Occupied(songs) => {
+                        songs.into_mut().push(path);
+                    }
+                    Entry::Vacant(v) => {
+                        v.insert(vec![path]);
+                    }
+                },
+                Extension::Playlist => playlist_index.push(path),
+                Extension::Unknown => (),
+            }
+        }
+    }
 
     (music_index, playlist_index)
 }
@@ -188,7 +201,11 @@ fn m3u_playlist_paths(playlist_path: &Path) -> Vec<PathBuf> {
     results
 }
 
-fn m3u_playlist<'a>(index: &'a [PathBuf], file_paths: &[PathBuf], name: String) -> Playlist<'a> {
+fn m3u_playlist<'a>(
+    index: &'a HashMap<OsString, Vec<PathBuf>>,
+    file_paths: &[PathBuf],
+    name: String,
+) -> Playlist<'a> {
     let songs = file_paths
         .iter()
         .filter_map(|p| match_file(index, p))
@@ -230,47 +247,46 @@ struct FileMatch<'a> {
 }
 
 #[inline]
-fn match_file<'index>(index: &'index [PathBuf], file_path: &Path) -> Option<&'index Path> {
-    let mut best_result = FileMatch::default();
+fn match_file<'index>(
+    index: &'index HashMap<OsString, Vec<PathBuf>>,
+    file_path: &Path,
+) -> Option<&'index Path> {
+    let file_stem = file_path.file_stem()?;
+    let local_songs = index.get(file_stem)?;
 
-    for local_path in index {
-        match (
-            file_path.file_stem(),
-            file_path.extension(),
-            local_path.file_stem(),
-            local_path.extension(),
-        ) {
-            (Some(ls), Some(le), Some(s), Some(e)) => {
-                if ls == s {
-                    let mut fm = FileMatch {
-                        path: Some(local_path),
-                        ..Default::default()
-                    };
-                    let local_components = local_path.components().rev().skip(1);
-                    let components = file_path.components().rev().skip(1);
-                    for (i, (lc, c)) in local_components.zip(components).enumerate() {
-                        if lc != c {
-                            fm.matching_components = i;
-                            break;
-                        }
-                    }
+    let mut best_match = FileMatch::default();
+    for local_path in local_songs.iter() {
+        let (Some(local_extension), Some(file_extension)) =
+            (local_path.extension(), file_path.extension())
+        else {
+            continue;
+        };
 
-                    fm.extension_matches = le == e;
-
-                    if best_result.matching_components < fm.matching_components
-                        || best_result.matching_components == fm.matching_components
-                            && !best_result.extension_matches
-                            && fm.extension_matches
-                    {
-                        best_result = fm;
-                    }
-                }
+        let mut file_match = FileMatch {
+            path: Some(local_path),
+            ..Default::default()
+        };
+        let local_components = local_path.components().rev().skip(1);
+        let file_components = file_path.components().rev().skip(1);
+        for (i, (local_comp, file_comp)) in local_components.zip(file_components).enumerate() {
+            if local_comp != file_comp {
+                file_match.matching_components = i;
+                break;
             }
-            _ => continue,
+        }
+
+        file_match.extension_matches = file_extension == local_extension;
+
+        if best_match.matching_components < file_match.matching_components
+            || best_match.matching_components == file_match.matching_components
+                && !best_match.extension_matches
+                && file_match.extension_matches
+        {
+            best_match = file_match;
         }
     }
 
-    best_result.path
+    best_match.path
 }
 
 #[cfg(not(target_os = "windows"))]
