@@ -21,7 +21,7 @@ impl<T: AsRef<Path>> From<T> for SongMetadata {
             Self {
                 title: tag.take_title().unwrap_or_default(),
                 artist: tag.take_artist().unwrap_or_default(),
-                duration: tag.duration().map(|d| d.as_secs()).unwrap_or(0),
+                duration: tag.duration().as_secs(),
             }
         } else {
             Self::default()
