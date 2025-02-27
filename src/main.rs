@@ -5,6 +5,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
+use std::time::Instant;
 
 use clap::{crate_authors, crate_version, value_parser, Arg, ColorChoice, Command, ValueHint};
 use clap_complete::generate;
@@ -42,6 +43,36 @@ impl FromStr for Shell {
             "zsh" => Ok(Shell::Zsh),
             _ => Err("Unknown shell"),
         }
+    }
+}
+
+struct Timer {
+    start: Instant,
+    timings: Vec<(Instant, String)>,
+}
+impl Timer {
+    fn new() -> Self {
+        Self {
+            start: Instant::now(),
+            timings: Vec::new(),
+        }
+    }
+
+    fn time(&mut self, name: impl Into<String>) {
+        self.timings.push((Instant::now(), name.into()));
+    }
+
+    fn display(&self) {
+        let mut prev = self.start;
+        for (time, name) in self.timings.iter() {
+            let millis = time.duration_since(prev).as_millis();
+            println!("{millis:6}ms  {name}");
+
+            prev = *time;
+        }
+
+        let millis = prev.duration_since(self.start).as_millis();
+        println!("{millis:6}ms  total");
     }
 }
 
@@ -97,11 +128,20 @@ fn main() {
                 .conflicts_with("music-dir")
                 .num_args(1)
                 .value_parser(value_parser!(Shell)),
+        )
+        .arg(
+            Arg::new("timings")
+                .short('t')
+                .long("timings")
+                .help("Print timing information")
+                .num_args(0),
         );
 
     let matches = app.clone().get_matches();
 
     let generate_completion = matches.get_one("generate-completion");
+
+    let print_timings = matches.get_flag("timings");
 
     if let Some(shell) = generate_completion {
         let mut stdout = std::io::stdout();
@@ -120,8 +160,10 @@ fn main() {
     let format = matches.get_one("format").copied().unwrap();
     let extension = matches.get_one("output-file-extension").unwrap_or(&"");
 
+    let mut timer = Timer::new();
     println!("indexing...");
     let (music_index, playlist_index) = index(music_dir.as_ref());
+    timer.time("indexing");
 
     println!("localizing songs...");
     let playlists: Vec<Playlist> = playlist_index
@@ -133,13 +175,19 @@ fn main() {
             name.map(|s| m3u_playlist(&music_index, &file_paths, s.to_string()))
         })
         .collect();
+    timer.time("localization");
 
     println!("writing playlists...");
     for mut p in playlists {
         p.write_to(output_dir.as_ref(), format, extension);
     }
+    timer.time("writing");
 
     println!("done");
+
+    if print_timings {
+        timer.display();
+    }
 }
 
 fn index(music_dir: &Path) -> (HashMap<OsString, Vec<PathBuf>>, Vec<PathBuf>) {
@@ -160,12 +208,9 @@ fn index(music_dir: &Path) -> (HashMap<OsString, Vec<PathBuf>>, Vec<PathBuf>) {
     let iter = WalkDir::new(abs_music_path)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| match e.metadata() {
-            Ok(m) => m.is_file(),
-            Err(_e) => false,
-        });
-    for d in iter {
-        let path = d.into_path();
+        .filter(|e| e.metadata().is_ok_and(|m| m.is_file()));
+    for entry in iter {
+        let path = entry.into_path();
         if let Some(extension) = path.extension() {
             let Some(file_stem) = path.file_stem() else {
                 continue;
