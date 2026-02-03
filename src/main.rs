@@ -284,11 +284,11 @@ impl Extension {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct FileMatch<'a> {
     extension_matches: bool,
     matching_components: usize,
-    path: Option<&'a Path>,
+    path: &'a Path,
 }
 
 #[inline]
@@ -299,7 +299,7 @@ fn match_file<'index>(
     let file_stem = file_path.file_stem()?;
     let local_songs = index.get(file_stem)?;
 
-    let mut best_match = FileMatch::default();
+    let mut best_match = None;
     for local_path in local_songs.iter() {
         let (Some(local_extension), Some(file_extension)) =
             (local_path.extension(), file_path.extension())
@@ -307,31 +307,39 @@ fn match_file<'index>(
             continue;
         };
 
-        let mut file_match = FileMatch {
-            path: Some(local_path),
-            ..Default::default()
-        };
         let local_components = local_path.components().rev().skip(1);
         let file_components = file_path.components().rev().skip(1);
-        for (i, (local_comp, file_comp)) in local_components.zip(file_components).enumerate() {
+        let mut matching_components = 0;
+        for (local_comp, file_comp) in local_components.zip(file_components) {
             if local_comp != file_comp {
-                file_match.matching_components = i;
                 break;
             }
+            matching_components += 1;
         }
 
-        file_match.extension_matches = file_extension == local_extension;
+        let file_match = FileMatch {
+            path: local_path,
+            extension_matches: file_extension == local_extension,
+            matching_components,
+        };
 
+        let Some(best_match) = &mut best_match else {
+            best_match = Some(file_match);
+            continue;
+        };
+
+        // Either more components match, or the matching components are the
+        // same, but the extension matches.
         if best_match.matching_components < file_match.matching_components
-            || best_match.matching_components == file_match.matching_components
+            || (best_match.matching_components == file_match.matching_components
                 && !best_match.extension_matches
-                && file_match.extension_matches
+                && file_match.extension_matches)
         {
-            best_match = file_match;
+            *best_match = file_match;
         }
     }
 
-    best_match.path
+    best_match.map(|m| m.path)
 }
 
 #[cfg(not(target_os = "windows"))]
